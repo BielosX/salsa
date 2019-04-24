@@ -1,13 +1,15 @@
-import opcodes.Dec;
-import opcodes.Inc;
+import opcodes.*;
 
-import static opcodes.Registers.R1;
+import static opcodes.Registers.*;
 
 public class Main {
 
-    @Inc(line = 0, reg = R1, value = 5)
-    @Dec(line = 1, reg = R1, value = 1)
-    @Inc(line = 2, reg = R1, value = 5)
+    @Mov(line = 0, dest = R2, val = 10)
+    @Mov(line = 1, dest = R1, val = 0)
+    @Add(line = 2, dest = R1, op1 = R2, op2 = R1)
+    @Dec(line = 3, reg = R2, value = 1)
+    @CmpZero(line = 4, reg = R2)
+    @Jnz(line = 5, jumpTo = 2)
     public static void start() {}
 
     public static void main(String[] args) {
