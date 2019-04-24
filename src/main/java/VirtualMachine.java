@@ -1,5 +1,6 @@
 import com.google.common.collect.ImmutableMap;
 import lombok.EqualsAndHashCode;
+import lombok.SneakyThrows;
 import opcodes.*;
 
 import java.lang.annotation.Annotation;
@@ -21,13 +22,11 @@ public class VirtualMachine {
             Inc.class, this::inc,
             Dec.class, this::dec
     );
-    private final Map<Class<? extends Annotation>, Consumer<Annotation>> containerUnwr = ImmutableMap.of(
-            Incs.class, this::unwrapIncs,
-            Decs.class, this::unwrapDecs
-    );
     private final Map<Class<? extends Annotation>, Consumer<Annotation>> unwrappers = ImmutableMap.of(
-            Inc.class, this::unwrapInc,
-            Dec.class, this::unwrapDec
+            Inc.class, this::unwrapSingle,
+            Dec.class, this::unwrapSingle,
+            Incs.class, this::unwrapContainer,
+            Decs.class, this::unwrapContainer
     );
     private final Map<Integer, Runnable> process;
 
@@ -46,12 +45,7 @@ public class VirtualMachine {
             List<Annotation> program = Arrays.asList(method.get().getDeclaredAnnotations());
             for (int x = 0; x < program.size(); ++x) {
                 Annotation annotation = program.get(x);
-                if (containerUnwr.keySet().contains(annotation.annotationType())) {
-                    containerUnwr.get(annotation.annotationType()).accept(annotation);
-                }
-                else {
-                    unwrappers.get(annotation.annotationType()).accept(annotation);
-                }
+                unwrappers.get(annotation.annotationType()).accept(annotation);
             }
             Optional<Runnable> line = maybeGet(process, programCounter);
             while (line.isPresent()) {
@@ -70,24 +64,25 @@ public class VirtualMachine {
         return Optional.ofNullable(map.get(key));
     }
 
-    private void unwrapInc(Annotation annotation) {
-        Inc inc = (Inc)annotation;
-        process.put(inc.line(), functions.get(inc.annotationType()).apply(inc));
+    private void unwrapSingle(Annotation annotation) {
+        process.put(getLine(annotation), functions.get(annotation.annotationType()).apply(annotation));
     }
 
-    private void unwrapDec(Annotation annotation) {
-        Dec dec = (Dec)annotation;
-        process.put(dec.line(), functions.get(dec.annotationType()).apply(dec));
+    @SneakyThrows
+    private Integer getLine(Annotation annotation) {
+        Method method = annotation.annotationType().getMethod("line");
+        return (Integer)method.invoke(annotation);
     }
 
-    private void unwrapIncs(Annotation annotation) {
-        Incs incs = (Incs)annotation;
-        Arrays.stream(incs.value()).forEach(i -> process.put(i.line(), functions.get(i.annotationType()).apply(i)));
+    @SneakyThrows
+    private Annotation[] getInner(Annotation annotation) {
+        Method method = annotation.annotationType().getMethod("value");
+        return (Annotation[]) method.invoke(annotation);
     }
 
-    private void unwrapDecs(Annotation annotation) {
-        Decs decs = (Decs)annotation;
-        Arrays.stream(decs.value()).forEach(d -> process.put(d.line(), functions.get(d.annotationType()).apply(d)));
+    private void unwrapContainer(Annotation annotation) {
+        Arrays.stream(getInner(annotation))
+                .forEach(i -> process.put(getLine(i), functions.get(i.annotationType()).apply(i)));
     }
 
     private Runnable inc(Annotation a) {
